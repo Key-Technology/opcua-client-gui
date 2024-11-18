@@ -1,32 +1,27 @@
 
-import unittest
-import sys
-print("SYS:PATH", sys.path)
-sys.path.insert(0, "python-opcua")
-sys.path.insert(0, "opcua-widgets")
-import os
-print("PWD", os.getcwd())
+import pytest
 
 from asyncua.sync import Server
 
-from PyQt5.QtCore import QTimer, QSettings, QModelIndex, Qt, QCoreApplication
+from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtTest import QTest
 
 from uaclient.mainwindow import Window
 
 
-class TestClient(unittest.TestCase):
-    def setUp(self):
+class TestClient:
+    @pytest.fixture
+    def resources(self, qtbot):
         self.server = Server()
         url = "opc.tcp://localhost:48400/freeopcua/server/"
         self.server.set_endpoint(url)
         self.server.start()
         self.client = Window()
+        qtbot.addWidget = self.client
         self.client.ui.addrComboBox.setCurrentText(url)
         self.client.connect()
-
-    def tearDown(self):
+        yield
         self.client.disconnect()
         self.server.stop()
 
@@ -37,28 +32,22 @@ class TestClient(unittest.TestCase):
         item = self.client.attrs_ui.model.itemFromIndex(idx)
         return item.data(Qt.UserRole).value
 
-    def test_select_objects(self):
+    def test_select_objects(self, resources):
         objects = self.server.nodes.objects
         self.client.tree_ui.expand_to_node(objects)
-        self.assertEqual(objects, self.client.tree_ui.get_current_node())
-        self.assertGreater(self.client.attrs_ui.model.rowCount(), 6)
-        self.assertGreater(self.client.refs_ui.model.rowCount(), 1)
+        assert objects == self.client.tree_ui.get_current_node()
+        assert self.client.attrs_ui.model.rowCount() >  6
+        assert self.client.refs_ui.model.rowCount() > 1
 
         data = self.get_attr_value("NodeId")
-        self.assertEqual(data, objects.nodeid)
+        assert data == objects.nodeid
 
-    def test_select_server_node(self):
+    def test_select_server_node(self, resources):
         server_node = self.server.nodes.server
         self.client.tree_ui.expand_to_node(server_node)
-        self.assertEqual(server_node, self.client.tree_ui.get_current_node())
-        self.assertGreater(self.client.attrs_ui.model.rowCount(), 6)
-        self.assertGreater(self.client.refs_ui.model.rowCount(), 10)
+        assert server_node ==  self.client.tree_ui.get_current_node()
+        assert self.client.attrs_ui.model.rowCount() > 6
+        assert self.client.refs_ui.model.rowCount() > 10
 
         data = self.get_attr_value("NodeId")
-        self.assertEqual(data, server_node.nodeid)
-
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    unittest.main()
+        assert data == server_node.nodeid

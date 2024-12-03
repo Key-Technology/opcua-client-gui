@@ -1,8 +1,5 @@
 import pytest
-import logging
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QMenu
-from asyncua.sync import Server, ua
+from asyncua.sync import Server
 from uaclient.mainwindow import Window
 
 URL = "opc.tcp://localhost:48400/freeopcua/server/"

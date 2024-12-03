@@ -6,6 +6,8 @@ from asyncua.sync import Server, ua
 from uaclient.mainwindow import Window
 
 URL = "opc.tcp://localhost:48400/freeopcua/server/"
+
+
 @pytest.fixture
 def server():
     server = Server()

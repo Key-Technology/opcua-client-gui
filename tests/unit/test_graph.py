@@ -4,7 +4,10 @@ from PyQt5.QtCore import Qt
 
 from asyncua.sync import Server, ua
 from uaclient.mainwindow import Window
+
 URL = "opc.tcp://localhost:48400/freeopcua/server/"
+
+
 @pytest.fixture
 def server():
     server = Server()
@@ -27,7 +30,7 @@ def client(qtbot, server):
 def test_add_to_graph(client, server):
     namepace = server.register_namespace("custom_namespace")
     objects = server.nodes.objects
-    string_variable = objects.add_variable(namepace, "string_variable", 'Value')
+    string_variable = objects.add_variable(namepace, "string_variable", "Value")
     float_variable = objects.add_variable(namepace, "float_variable", 1.0)
 
     client.graph_ui._add_node_to_channel(string_variable)
@@ -47,6 +50,7 @@ def test_remove_from_graph(client, server):
     client.graph_ui._remove_node_from_channel(float_variable)
 
     assert len(client.graph_ui._node_list) == 0
+
 
 def test_restart_timer(client, server):
     client.ui.spinBoxNumberOfPoints.setValue(90)

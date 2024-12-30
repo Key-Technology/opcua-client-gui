@@ -34,6 +34,7 @@ from uaclient.mainwindow_ui import Ui_MainWindow
 from uaclient.connection_dialog import ConnectionDialog
 from uaclient.application_certificate_dialog import ApplicationCertificateDialog
 from uaclient.graphwidget import GraphUI
+from uaclient.live_tree_model import LiveTreeModel
 
 # must be here for resources even if not used
 from uawidgets import resources  # noqa: F401
@@ -49,6 +50,11 @@ logger = logging.getLogger(__name__)
 
 
 class DataChangeHandler(QObject):
+
+    def __init__(self, node_signal_dict):
+        super(DataChangeHandler, self).__init__()
+        self.node_signal_dict = node_signal_dict
+
     data_change_fired = pyqtSignal(object, str, str)
 
     def datachange_notification(self, node, val, data):
@@ -58,7 +64,7 @@ class DataChangeHandler(QObject):
             dato = data.monitored_item.Value.ServerTimestamp.isoformat()
         else:
             dato = datetime.now().isoformat()
-        self.data_change_fired.emit(node, str(val), dato)
+        self.node_signal_dict[str(node)].signal.emit(node, val, dato)
 
 
 class EventHandler(QObject):
@@ -139,44 +145,15 @@ class EventUI(object):
         self.model.appendRow([QStandardItem(str(event))])
 
 
-class DataChangeUI(object):
+class DataChangeSubscriptionManager(object):
 
     def __init__(self, window, uaclient):
         self.window = window
         self.uaclient = uaclient
-        self._subhandler = DataChangeHandler()
         self._subscribed_nodes = []
-        self.model = QStandardItemModel()
-        self.window.ui.subView.setModel(self.model)
-        self.window.ui.subView.horizontalHeader().setSectionResizeMode(1)
-
-        self.window.ui.actionSubscribeDataChange.triggered.connect(self._subscribe)
-        self.window.ui.actionUnsubscribeDataChange.triggered.connect(self._unsubscribe)
-
-        # populate contextual menu
-        self.window.addAction(self.window.ui.actionSubscribeDataChange)
-        self.window.addAction(self.window.ui.actionUnsubscribeDataChange)
-
-        # handle subscriptions
-        self._subhandler.data_change_fired.connect(
-            self._update_subscription_model, type=Qt.QueuedConnection
-        )
-
-        # accept drops
-        self.model.canDropMimeData = self.canDropMimeData
-        self.model.dropMimeData = self.dropMimeData
-
-    def canDropMimeData(self, mdata, action, row, column, parent):
-        return True
-
-    def dropMimeData(self, mdata, action, row, column, parent):
-        node = self.uaclient.client.get_node(mdata.text())
-        self._subscribe(node)
-        return True
 
     def clear(self):
         self._subscribed_nodes = []
-        self.model.clear()
 
     def show_error(self, *args):
         self.window.show_error(*args)
@@ -188,36 +165,28 @@ class DataChangeUI(object):
             if node is None:
                 return
         if node in self._subscribed_nodes:
-            logger.warning("allready subscribed to node: %s ", node)
             return
-        self.model.setHorizontalHeaderLabels(["DisplayName", "Value", "Timestamp"])
-        text = str(node.read_display_name().Text)
-        row = [QStandardItem(text), QStandardItem("No Data yet"), QStandardItem("")]
-        row[0].setData(node)
-        self.model.appendRow(row)
-        self._subscribed_nodes.append(node)
-        self.window.ui.subDockWidget.raise_()
         try:
-            self.uaclient.subscribe_datachange(node, self._subhandler)
+            self.uaclient.subscribe_datachange(node, self.window._subhandler)
+
         except Exception as ex:
-            self.window.show_error(ex)
-            idx = self.model.indexFromItem(row[0])
-            self.model.takeRow(idx.row())
-            raise
+            if type(ex) is ua.uaerrors.BadAttributeIdInvalid:
+                return
+            return ex
+
+        self._subscribed_nodes.append(node)
 
     @trycatchslot
-    def _unsubscribe(self):
-        node = self.window.get_current_node()
+    def _unsubscribe(self, node):
         if node is None:
-            return
-        self.uaclient.unsubscribe_datachange(node)
-        self._subscribed_nodes.remove(node)
-        i = 0
-        while self.model.item(i):
-            item = self.model.item(i)
-            if item.data() == node:
-                self.model.removeRow(i)
-            i += 1
+            node = self.window.get_current_node()
+        try:
+            self._subscribed_nodes.remove(node)
+            self.uaclient.unsubscribe_datachange(node)
+        except Exception as ex:
+            if type(ex) is ValueError:
+                return
+            logger.error(ex)
 
     def _update_subscription_model(self, node, value, timestamp):
         i = 0
@@ -274,21 +243,32 @@ class Window(QMainWindow):
 
         self.uaclient = UaClient()
 
-        self.tree_ui = TreeWidget(self.ui.treeView)
-        self.tree_ui.error.connect(self.show_error)
+        self.node_signal_dict = {}
         self.setup_context_menu_tree()
+        self.tree_ui = TreeWidget(self.ui.treeView)
+        self.data_change_manager = DataChangeSubscriptionManager(self, self.uaclient)
+        self.tree_ui.model = LiveTreeModel(
+            self.uaclient, self.node_signal_dict, self.data_change_manager
+        )
+        self.tree_ui.model.setHorizontalHeaderLabels(
+            ["DisplayName", "BrowseName", "NodeId", "Value", "Description", "DataType"]
+        )
+        self.tree_ui.view.setModel(self.tree_ui.model)
+
+        self.tree_ui.error.connect(self.show_error)
+
         self.ui.treeView.selectionModel().currentChanged.connect(
             self._update_actions_state
         )
-
         self.refs_ui = RefsWidget(self.ui.refView)
         self.refs_ui.error.connect(self.show_error)
         self.attrs_ui = AttrsWidget(self.ui.attrView)
         self.attrs_ui.error.connect(self.show_error)
-        self.datachange_ui = DataChangeUI(self, self.uaclient)
+
         self.event_ui = EventUI(self, self.uaclient)
         self.graph_ui = GraphUI(self, self.uaclient)
 
+        self._subhandler = DataChangeHandler(self.node_signal_dict)
         self.ui.addrComboBox.currentTextChanged.connect(self._uri_changed)
         self._uri_changed(
             self.ui.addrComboBox.currentText()
@@ -309,7 +289,6 @@ class Window(QMainWindow):
         data = self.settings.value("main_window_state", None)
         if data:
             self.restoreState(data)
-
         self.ui.connectButton.clicked.connect(self.connect)
         self.ui.disconnectButton.clicked.connect(self.disconnect)
         # self.ui.treeView.expanded.connect(self._fit)
@@ -322,6 +301,51 @@ class Window(QMainWindow):
             self.show_application_certificate_dialog
         )
         self.ui.actionDark_Mode.triggered.connect(self.dark_mode)
+
+        self.tree_ui.model.description_datatype_added.connect(
+            self.tree_ui.model.update_description_and_data_type
+        )
+
+        self.ui.treeView.expanded.connect(self.tree_ui.model.tree_expanded)
+        self.attrs_ui.view.expanded.connect(self._attrs_item_expanded)
+        self.ui.treeView.collapsed.connect(self.tree_ui.model.tree_collapsed)
+
+    def _attrs_item_expanded(self, idx):
+        if self.attrs_ui.current_node:
+            nodeId = str(self.attrs_ui.current_node)
+            if nodeId in self.node_signal_dict:
+                self.node_signal_dict[nodeId].signal.connect(
+                    self._attrs_reload_value_and_timestamp
+                )
+
+    def _remove_children(self, item):
+        while item.hasChildren():
+            if item.child(0):
+                item.removeRow(0)
+            else:
+                break
+
+    def _attrs_reload_value_and_timestamp(self, node, value, timestamp):
+        if self.attrs_ui.current_node == node:
+            parent_value = self.attrs_ui.model.findItems("Value")[0]
+            child_value = parent_value.child(0)
+            child_value.setText("Value")
+            if isinstance(value, list):
+                self._remove_children(child_value)
+                self.attrs_ui._show_list(
+                    child_value,
+                    value,
+                    parent_value.child(0, 1).data(Qt.UserRole).uatype,
+                )
+            elif (
+                parent_value.child(0, 1).data(Qt.UserRole).uatype
+                == ua.VariantType.ExtensionObject
+            ):
+                self._remove_children(child_value)
+                self.attrs_ui._show_ext_obj(child_value, value)
+            else:
+                parent_value.child(0, 1).setText(str(value))
+            parent_value.child(2, 1).setText(timestamp)
 
     def _uri_changed(self, uri):
         self.uaclient.load_security_settings(uri)
@@ -419,7 +443,7 @@ class Window(QMainWindow):
             self.tree_ui.clear()
             self.refs_ui.clear()
             self.attrs_ui.clear()
-            self.datachange_ui.clear()
+            self.data_change_manager.clear()
             self.event_ui.clear()
 
     def closeEvent(self, event):

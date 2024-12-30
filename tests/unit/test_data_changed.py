@@ -1,7 +1,6 @@
 import pytest
-from uaclient.mainwindow import DataChangeUI
-from PyQt5.QtGui import QStandardItemModel
-from unittest.mock import patch, Mock
+from uaclient.mainwindow import DataChangeSubscriptionManager
+from unittest.mock import Mock
 
 
 @pytest.fixture
@@ -21,32 +20,30 @@ def uaclient():
     yield Mock()
 
 
-def test_subscribe_data_changed(window, server_node, uaclient, server):
-    datachange_ui = DataChangeUI(window, uaclient)
-    datachange_ui._subscribe()
+def test_subscribe_data_changed(window, server_node, uaclient):
+    data_change_manager = DataChangeSubscriptionManager(window, uaclient)
+    data_change_manager._subscribe()
 
     # only one subscription per node is allowed, so this should not be added to _subscribed_nodes
-    datachange_ui._subscribe()
+    data_change_manager._subscribe()
 
-    assert len(datachange_ui._subscribed_nodes) == 1
-    assert datachange_ui._subscribed_nodes[0] == server_node
+    assert len(data_change_manager._subscribed_nodes) == 1
+    assert data_change_manager._subscribed_nodes[0] == server_node
 
 
-def test_unsubscribe_data_changed(window, server_node, uaclient, server):
-    datachange_ui = DataChangeUI(window, uaclient)
-    datachange_ui._subscribe(server_node)
-    assert len(datachange_ui._subscribed_nodes) == 1
+def test_unsubscribe_data_changed(window, server_node, uaclient):
+    data_change_manager = DataChangeSubscriptionManager(window, uaclient)
+    data_change_manager._subscribe(server_node)
+    assert len(data_change_manager._subscribed_nodes) == 1
 
-    datachange_ui._unsubscribe(server_node)
-    datachange_ui._unsubscribe(server_node)
-    assert len(datachange_ui._subscribed_nodes) == 0
+    data_change_manager._unsubscribe(server_node)
+    data_change_manager._unsubscribe(server_node)
+    assert len(data_change_manager._subscribed_nodes) == 0
 
 
 def test_clear(window, server_node, uaclient):
-    datachange_ui = DataChangeUI(window, uaclient)
-    datachange_ui._subscribe(server_node)
+    data_change_manager = DataChangeSubscriptionManager(window, uaclient)
+    data_change_manager._subscribe(server_node)
 
-    with patch.object(QStandardItemModel, "clear") as q_clear:
-        datachange_ui.clear()
-    assert len(datachange_ui._subscribed_nodes) == 0
-    q_clear.assert_called_once()
+    data_change_manager.clear()
+    assert len(data_change_manager._subscribed_nodes) == 0

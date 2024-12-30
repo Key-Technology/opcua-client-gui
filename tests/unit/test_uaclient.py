@@ -26,7 +26,8 @@ def uaclient(url):
 
 
 def test_subscribe_datachange(uaclient, server):
-    handler = DataChangeHandler()
+    node_signal_dict = {}
+    handler = DataChangeHandler(node_signal_dict)
     namepace = server.register_namespace("custom_namespace")
     objects = server.nodes.objects
     float_variable = objects.add_variable(namepace, "float_variable", 1.0)

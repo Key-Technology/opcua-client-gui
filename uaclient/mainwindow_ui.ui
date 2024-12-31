@@ -74,8 +74,6 @@
     <addaction name="actionDisconnect"/>
     <addaction name="actionCopyPath"/>
     <addaction name="actionCopyNodeId"/>
-    <addaction name="actionSubscribeDataChange"/>
-    <addaction name="actionUnsubscribeDataChange"/>
     <addaction name="actionSubscribeEvent"/>
     <addaction name="actionUnsubscribeEvents"/>
    </widget>
@@ -244,55 +242,6 @@
        </property>
        <property name="text">
         <string>Connect options</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
-   </widget>
-  </widget>
-  <widget class="QDockWidget" name="subDockWidget">
-   <property name="sizePolicy">
-    <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-     <horstretch>0</horstretch>
-     <verstretch>0</verstretch>
-    </sizepolicy>
-   </property>
-   <property name="windowTitle">
-    <string>S&amp;ubscriptions</string>
-   </property>
-   <attribute name="dockWidgetArea">
-    <number>2</number>
-   </attribute>
-   <widget class="QWidget" name="dockWidgetContents_3">
-    <property name="sizePolicy">
-     <sizepolicy hsizetype="Expanding" vsizetype="Preferred">
-      <horstretch>0</horstretch>
-      <verstretch>0</verstretch>
-     </sizepolicy>
-    </property>
-    <layout class="QGridLayout" name="gridLayout_3">
-     <item row="0" column="0">
-      <widget class="QTableView" name="subView">
-       <property name="focusPolicy">
-        <enum>Qt::StrongFocus</enum>
-       </property>
-       <property name="acceptDrops">
-        <bool>true</bool>
-       </property>
-       <property name="sizeAdjustPolicy">
-        <enum>QAbstractScrollArea::AdjustToContents</enum>
-       </property>
-       <property name="editTriggers">
-        <set>QAbstractItemView::NoEditTriggers</set>
-       </property>
-       <property name="tabKeyNavigation">
-        <bool>false</bool>
-       </property>
-       <property name="dragDropOverwriteMode">
-        <bool>false</bool>
-       </property>
-       <property name="dragDropMode">
-        <enum>QAbstractItemView::DropOnly</enum>
        </property>
       </widget>
      </item>
@@ -472,22 +421,6 @@
     <string>Disconnect from server</string>
    </property>
   </action>
-  <action name="actionSubscribeDataChange">
-   <property name="text">
-    <string>&amp;Subscribe to data change</string>
-   </property>
-   <property name="toolTip">
-    <string>Subscribe to data change from selected node</string>
-   </property>
-  </action>
-  <action name="actionUnsubscribeDataChange">
-   <property name="text">
-    <string>&amp;Unsubscribe to DataChange</string>
-   </property>
-   <property name="toolTip">
-    <string>Unsubscribe to DataChange for current node</string>
-   </property>
-  </action>
   <action name="actionSubscribeEvent">
    <property name="text">
     <string>Subscribe to &amp;events</string>
@@ -576,7 +509,6 @@
   <tabstop>treeView</tabstop>
   <tabstop>attrView</tabstop>
   <tabstop>attrRefreshButton</tabstop>
-  <tabstop>subView</tabstop>
   <tabstop>refView</tabstop>
   <tabstop>evView</tabstop>
   <tabstop>spinBoxNumberOfPoints</tabstop>

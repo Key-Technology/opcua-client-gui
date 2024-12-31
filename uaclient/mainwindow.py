@@ -2,7 +2,6 @@
 
 import sys
 
-from datetime import datetime
 import logging
 
 from PyQt5.QtCore import (
@@ -27,7 +26,6 @@ from PyQt5.QtWidgets import (
 )
 
 from asyncua import ua
-from asyncua.sync import SyncNode
 
 from uaclient.uaclient import UaClient
 from uaclient.mainwindow_ui import Ui_MainWindow
@@ -48,19 +46,6 @@ from uawidgets.call_method_dialog import CallMethodDialog
 logger = logging.getLogger(__name__)
 
 
-class DataChangeHandler(QObject):
-    data_change_fired = pyqtSignal(object, str, str)
-
-    def datachange_notification(self, node, val, data):
-        if data.monitored_item.Value.SourceTimestamp:
-            dato = data.monitored_item.Value.SourceTimestamp.isoformat()
-        elif data.monitored_item.Value.ServerTimestamp:
-            dato = data.monitored_item.Value.ServerTimestamp.isoformat()
-        else:
-            dato = datetime.now().isoformat()
-        self.data_change_fired.emit(node, str(val), dato)
-
-
 class EventHandler(QObject):
     event_fired = pyqtSignal(object)
 
@@ -69,7 +54,6 @@ class EventHandler(QObject):
 
 
 class EventUI(object):
-
     def __init__(self, window, uaclient):
         self.window = window
         self.uaclient = uaclient
@@ -139,100 +123,7 @@ class EventUI(object):
         self.model.appendRow([QStandardItem(str(event))])
 
 
-class DataChangeUI(object):
-
-    def __init__(self, window, uaclient):
-        self.window = window
-        self.uaclient = uaclient
-        self._subhandler = DataChangeHandler()
-        self._subscribed_nodes = []
-        self.model = QStandardItemModel()
-        self.window.ui.subView.setModel(self.model)
-        self.window.ui.subView.horizontalHeader().setSectionResizeMode(1)
-
-        self.window.ui.actionSubscribeDataChange.triggered.connect(self._subscribe)
-        self.window.ui.actionUnsubscribeDataChange.triggered.connect(self._unsubscribe)
-
-        # populate contextual menu
-        self.window.addAction(self.window.ui.actionSubscribeDataChange)
-        self.window.addAction(self.window.ui.actionUnsubscribeDataChange)
-
-        # handle subscriptions
-        self._subhandler.data_change_fired.connect(
-            self._update_subscription_model, type=Qt.QueuedConnection
-        )
-
-        # accept drops
-        self.model.canDropMimeData = self.canDropMimeData
-        self.model.dropMimeData = self.dropMimeData
-
-    def canDropMimeData(self, mdata, action, row, column, parent):
-        return True
-
-    def dropMimeData(self, mdata, action, row, column, parent):
-        node = self.uaclient.client.get_node(mdata.text())
-        self._subscribe(node)
-        return True
-
-    def clear(self):
-        self._subscribed_nodes = []
-        self.model.clear()
-
-    def show_error(self, *args):
-        self.window.show_error(*args)
-
-    @trycatchslot
-    def _subscribe(self, node=None):
-        if not isinstance(node, SyncNode):
-            node = self.window.get_current_node()
-            if node is None:
-                return
-        if node in self._subscribed_nodes:
-            logger.warning("allready subscribed to node: %s ", node)
-            return
-        self.model.setHorizontalHeaderLabels(["DisplayName", "Value", "Timestamp"])
-        text = str(node.read_display_name().Text)
-        row = [QStandardItem(text), QStandardItem("No Data yet"), QStandardItem("")]
-        row[0].setData(node)
-        self.model.appendRow(row)
-        self._subscribed_nodes.append(node)
-        self.window.ui.subDockWidget.raise_()
-        try:
-            self.uaclient.subscribe_datachange(node, self._subhandler)
-        except Exception as ex:
-            self.window.show_error(ex)
-            idx = self.model.indexFromItem(row[0])
-            self.model.takeRow(idx.row())
-            raise
-
-    @trycatchslot
-    def _unsubscribe(self):
-        node = self.window.get_current_node()
-        if node is None:
-            return
-        self.uaclient.unsubscribe_datachange(node)
-        self._subscribed_nodes.remove(node)
-        i = 0
-        while self.model.item(i):
-            item = self.model.item(i)
-            if item.data() == node:
-                self.model.removeRow(i)
-            i += 1
-
-    def _update_subscription_model(self, node, value, timestamp):
-        i = 0
-        while self.model.item(i):
-            item = self.model.item(i)
-            if item.data() == node:
-                it = self.model.item(i, 1)
-                it.setText(value)
-                it_ts = self.model.item(i, 2)
-                it_ts.setText(timestamp)
-            i += 1
-
-
 class Window(QMainWindow):
-
     def __init__(self):
         QMainWindow.__init__(self)
         self.ui = Ui_MainWindow()
@@ -244,8 +135,7 @@ class Window(QMainWindow):
         w = QWidget()
         self.ui.addrDockWidget.setTitleBarWidget(w)
         # tabify some docks
-        self.tabifyDockWidget(self.ui.evDockWidget, self.ui.subDockWidget)
-        self.tabifyDockWidget(self.ui.subDockWidget, self.ui.refDockWidget)
+        self.tabifyDockWidget(self.ui.evDockWidget, self.ui.refDockWidget)
         self.tabifyDockWidget(self.ui.refDockWidget, self.ui.graphDockWidget)
 
         # we only show statusbar in case of errors
@@ -285,7 +175,6 @@ class Window(QMainWindow):
         self.refs_ui.error.connect(self.show_error)
         self.attrs_ui = AttrsWidget(self.ui.attrView)
         self.attrs_ui.error.connect(self.show_error)
-        self.datachange_ui = DataChangeUI(self, self.uaclient)
         self.event_ui = EventUI(self, self.uaclient)
         self.graph_ui = GraphUI(self, self.uaclient)
 
@@ -419,7 +308,6 @@ class Window(QMainWindow):
             self.tree_ui.clear()
             self.refs_ui.clear()
             self.attrs_ui.clear()
-            self.datachange_ui.clear()
             self.event_ui.clear()
 
     def closeEvent(self, event):

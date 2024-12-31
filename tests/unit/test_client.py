@@ -62,7 +62,6 @@ def test_disconnect(qtbot, url, server):
         == current_node.nodeid.to_string()
     )
     assert len(client.tree_ui.model._fetched) == 0
-    assert len(client.datachange_ui._subscribed_nodes) == 0
     assert len(client.event_ui._subscribed_nodes) == 0
 
 

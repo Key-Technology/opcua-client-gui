@@ -9,6 +9,23 @@
 
 
 from PyQt5 import QtCore, QtGui, QtWidgets
+from PyQt5.QtCore import Qt
+from PyQt5.QtCore import pyqtSignal
+
+
+class CustomTreeView(QtWidgets.QTreeView):
+    shift_click_expand = pyqtSignal(object)
+    shift_click_collapse = pyqtSignal(object)
+
+    def mousePressEvent(self, event):
+        idx = self.indexAt(event.pos())
+        if idx.isValid() and event.modifiers() & Qt.ShiftModifier:
+            if self.isExpanded(idx):
+                self.shift_click_collapse.emit(idx)
+            else:
+                self.shift_click_expand.emit(idx)
+        else:
+            super().mousePressEvent(event)
 
 
 class Ui_MainWindow(object):
@@ -38,7 +55,7 @@ class Ui_MainWindow(object):
         self.splitter.setSizePolicy(sizePolicy)
         self.splitter.setOrientation(QtCore.Qt.Horizontal)
         self.splitter.setObjectName("splitter")
-        self.treeView = QtWidgets.QTreeView(self.splitter)
+        self.treeView = CustomTreeView(self.splitter)
         sizePolicy = QtWidgets.QSizePolicy(
             QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding
         )

@@ -1,7 +1,6 @@
 #! /usr/bin/env python3
 
 import sys
-
 from datetime import datetime
 import logging
 
@@ -15,6 +14,7 @@ from PyQt5.QtCore import (
     QTextStream,
     QItemSelection,
     QCoreApplication,
+    QThreadPool,
 )
 from PyQt5.QtGui import QStandardItemModel, QStandardItem, QIcon
 from PyQt5.QtWidgets import (
@@ -34,6 +34,8 @@ from uaclient.mainwindow_ui import Ui_MainWindow
 from uaclient.connection_dialog import ConnectionDialog
 from uaclient.application_certificate_dialog import ApplicationCertificateDialog
 from uaclient.graphwidget import GraphUI
+from uaclient.tree_model import TreeModel
+from uaclient.recursive_tree_expand import RecursiveTreeExpand
 
 # must be here for resources even if not used
 from uawidgets import resources  # noqa: F401
@@ -43,7 +45,6 @@ from uawidgets.refs_widget import RefsWidget
 from uawidgets.utils import trycatchslot
 from uawidgets.logger import QtHandler
 from uawidgets.call_method_dialog import CallMethodDialog
-
 
 logger = logging.getLogger(__name__)
 
@@ -232,13 +233,14 @@ class DataChangeUI(object):
 
 
 class Window(QMainWindow):
+    expand_end_signal = pyqtSignal(object)
+    expand = pyqtSignal(object)
 
     def __init__(self):
         QMainWindow.__init__(self)
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self.setWindowIcon(QIcon(":/network.svg"))
-
         # fix stuff imposible to do in qtdesigner
         # remove dock titlebar for addressbar
         w = QWidget()
@@ -275,6 +277,8 @@ class Window(QMainWindow):
         self.uaclient = UaClient()
 
         self.tree_ui = TreeWidget(self.ui.treeView)
+        self.tree_ui.model = TreeModel()
+        self.tree_ui.view.setModel(self.tree_ui.model)
         self.tree_ui.error.connect(self.show_error)
         self.setup_context_menu_tree()
         self.ui.treeView.selectionModel().currentChanged.connect(
@@ -309,11 +313,9 @@ class Window(QMainWindow):
         data = self.settings.value("main_window_state", None)
         if data:
             self.restoreState(data)
-
+        self.thread_pool = QThreadPool()
         self.ui.connectButton.clicked.connect(self.connect)
         self.ui.disconnectButton.clicked.connect(self.disconnect)
-        # self.ui.treeView.expanded.connect(self._fit)
-
         self.ui.actionConnect.triggered.connect(self.connect)
         self.ui.actionDisconnect.triggered.connect(self.disconnect)
 
@@ -323,8 +325,46 @@ class Window(QMainWindow):
         )
         self.ui.actionDark_Mode.triggered.connect(self.dark_mode)
 
+        self.expand.connect(self.expand_item)
+        self.ui.treeView.shift_click_expand.connect(self.custom_expand)
+        self.ui.treeView.shift_click_collapse.connect(self.custom_collapse)
+        self.ui.treeView.collapsed.connect(self.standard_collapse)
+        self.running_expands = []
+
     def _uri_changed(self, uri):
         self.uaclient.load_security_settings(uri)
+
+    def recursive_collapse(self, idx):
+        child_item = self.tree_ui.model.itemFromIndex(idx)
+        i = 0
+        while True:
+            child = child_item.child(i)
+            if child is None:
+                break
+            index = child.index()
+            QApplication.processEvents()
+            self.tree_ui.view.setExpanded(index, False)
+            self.recursive_collapse(index)
+            QApplication.processEvents()
+            i = i + 1
+        self.tree_ui.view.setExpanded(idx, False)
+
+    expand = pyqtSignal(object)
+
+    def custom_expand(self, idx):
+        self.thread_pool.start(RecursiveTreeExpand(idx, self))
+
+    def expand_item(self, idx):
+        self.tree_ui.view.expand(idx)
+
+    def standard_collapse(self, idx):
+        if idx in self.running_expands:
+            self.running_expands.remove(idx)
+
+    def custom_collapse(self, idx):
+        if idx in self.running_expands:
+            self.running_expands.remove(idx)
+        self.recursive_collapse(idx)
 
     def show_connection_dialog(self):
         dia = ConnectionDialog(self, self.ui.addrComboBox.currentText())

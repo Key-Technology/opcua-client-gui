@@ -1,7 +1,7 @@
-from PyQt5.QtCore import QRunnable
+from PyQt5.QtCore import QThread
 
 
-class UnsubscribeWorker(QRunnable):
+class UnsubscribeWorker(QThread):
     def __init__(self, idx, model, subscription_handler):
         super().__init__()
         self.idx = idx
@@ -13,18 +13,20 @@ class UnsubscribeWorker(QRunnable):
         self.subscription_handler = subscription_handler
 
     def run(self):
+        self.subscription_handler.thread_running_lock.lock()
+        print("unsub")
+        self.subscription_handler.expanded_lock.lock()
         self.subscription_handler.is_expanded = False
-        if self.subscription_handler.is_subscribe_running:
-            self.subscription_handler.unsubscribe_is_waiting = True
-            return
-        self.subscription_handler.is_unsubscribe_running = True
-        self.subscription_handler.unsubscribe_started.emit()
+        self.subscription_handler.expanded_lock.unlock()
         item = self.model.itemFromIndex(self.idx)
         i = 0
         while True:
+            self.subscription_handler.expanded_lock.lock()
             if self.subscription_handler.is_expanded:
-                self.subscription_handler.relaunch_subscribe(i)
+                self.subscription_handler.last_unsubscribed = i
+                self.subscription_handler.expanded_lock.unlock()
                 break
+            self.subscription_handler.expanded_lock.unlock()
             child = item.child(i)
             if child is None:
                 break
@@ -34,5 +36,4 @@ class UnsubscribeWorker(QRunnable):
             if childNodeId in self.node_signal_dict:
                 self.data_change_manager._unsubscribe(childNode)
             i = i + 1
-        self.subscription_handler.is_unsubscribe_running = False
-        self.subscription_handler.unsubscribe_ended.emit()
+        self.subscription_handler.thread_running_lock.unlock()

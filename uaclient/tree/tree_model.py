@@ -12,8 +12,6 @@ from uawidgets.tree_widget import TreeViewModel
 
 from uaclient.tree.node_value_item import NodeValueItem
 from uaclient.tree.subscription_handler import SubscriptionHandler
-from uaclient.tree.subscribe_worker import SubscribeWorker
-from uaclient.tree.unsubscribe_worker import UnsubscribeWorker
 from uaclient.tree.description_datatype_worker import DescriptionDatatypeWorker
 from uaclient.tree.node_subscription_signal import NodeSubscriptionSignal
 
@@ -63,17 +61,12 @@ class TreeModel(TreeViewModel):
         if idx not in self.subscription_handlers:
             self.subscription_handlers[idx] = SubscriptionHandler(self, idx)
 
-        if self.subscription_handlers[idx].is_subscribe_running:
+        if self.subscription_handlers[idx].subscribe_thread.isRunning():
             return
-        self.threadpool.start(
-            SubscribeWorker(idx, self, self.subscription_handlers[idx])
-        )
+        self.subscription_handlers[idx].subscribe_thread.start()
 
     def tree_collapsed(self, idx):
-        unsubscribe_worker = UnsubscribeWorker(
-            idx, self, self.subscription_handlers[idx]
-        )
-        self.threadpool.start(unsubscribe_worker)
+        self.subscription_handlers[idx].unsubscribe_thread.start()
 
     def update_description_and_data_type(self, node, description, data_type):
         worker = DescriptionDatatypeWorker(node, description, data_type)

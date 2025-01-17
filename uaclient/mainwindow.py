@@ -35,6 +35,7 @@ from uaclient.graphwidget import GraphUI
 from uaclient.tree.tree_model import TreeModel
 from uaclient.tree.data_change_subscription_manager import DataChangeSubscriptionManager
 from uaclient.tree.data_change_handler import DataChangeHandler
+
 # must be here for resources even if not used
 from uawidgets import resources  # noqa: F401
 from uawidgets.attrs_widget import AttrsWidget
@@ -177,7 +178,14 @@ class Window(QMainWindow):
             self.uaclient, self.node_signal_dict, self.data_change_manager
         )
         self.tree_ui.model.setHorizontalHeaderLabels(
-            ["Display Name", "Browse Name", "Node ID", "Value", "Description", "Data Type"]
+            [
+                "Display Name",
+                "Browse Name",
+                "Node ID",
+                "Value",
+                "Description",
+                "Data Type",
+            ]
         )
         self.tree_ui.view.setModel(self.tree_ui.model)
 

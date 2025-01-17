@@ -2,7 +2,6 @@
 
 import sys
 
-from datetime import datetime
 import logging
 
 from PyQt5.QtCore import (
@@ -27,15 +26,15 @@ from PyQt5.QtWidgets import (
 )
 
 from asyncua import ua
-from asyncua.sync import SyncNode
 
 from uaclient.uaclient import UaClient
 from uaclient.mainwindow_ui import Ui_MainWindow
 from uaclient.connection_dialog import ConnectionDialog
 from uaclient.application_certificate_dialog import ApplicationCertificateDialog
 from uaclient.graphwidget import GraphUI
-from uaclient.live_tree_model import LiveTreeModel
-
+from uaclient.tree.tree_model import TreeModel
+from uaclient.tree.data_change_subscription_manager import DataChangeSubscriptionManager
+from uaclient.tree.data_change_handler import DataChangeHandler
 # must be here for resources even if not used
 from uawidgets import resources  # noqa: F401
 from uawidgets.attrs_widget import AttrsWidget
@@ -47,24 +46,6 @@ from uawidgets.call_method_dialog import CallMethodDialog
 
 
 logger = logging.getLogger(__name__)
-
-
-class DataChangeHandler(QObject):
-
-    def __init__(self, node_signal_dict):
-        super(DataChangeHandler, self).__init__()
-        self.node_signal_dict = node_signal_dict
-
-    data_change_fired = pyqtSignal(object, str, str)
-
-    def datachange_notification(self, node, val, data):
-        if data.monitored_item.Value.SourceTimestamp:
-            dato = data.monitored_item.Value.SourceTimestamp.isoformat()
-        elif data.monitored_item.Value.ServerTimestamp:
-            dato = data.monitored_item.Value.ServerTimestamp.isoformat()
-        else:
-            dato = datetime.now().isoformat()
-        self.node_signal_dict[str(node)].signal.emit(node, val, dato)
 
 
 class EventHandler(QObject):
@@ -145,61 +126,6 @@ class EventUI(object):
         self.model.appendRow([QStandardItem(str(event))])
 
 
-class DataChangeSubscriptionManager(object):
-
-    def __init__(self, window, uaclient):
-        self.window = window
-        self.uaclient = uaclient
-        self._subscribed_nodes = []
-
-    def clear(self):
-        self._subscribed_nodes = []
-
-    def show_error(self, *args):
-        self.window.show_error(*args)
-
-    @trycatchslot
-    def _subscribe(self, node=None):
-        if not isinstance(node, SyncNode):
-            node = self.window.get_current_node()
-            if node is None:
-                return
-        if node in self._subscribed_nodes:
-            return
-        try:
-            self.uaclient.subscribe_datachange(node, self.window._subhandler)
-
-        except Exception as ex:
-            if type(ex) is ua.uaerrors.BadAttributeIdInvalid:
-                return
-            return ex
-
-        self._subscribed_nodes.append(node)
-
-    @trycatchslot
-    def _unsubscribe(self, node):
-        if node is None:
-            node = self.window.get_current_node()
-        try:
-            self._subscribed_nodes.remove(node)
-            self.uaclient.unsubscribe_datachange(node)
-        except Exception as ex:
-            if type(ex) is ValueError:
-                return
-            logger.error(ex)
-
-    def _update_subscription_model(self, node, value, timestamp):
-        i = 0
-        while self.model.item(i):
-            item = self.model.item(i)
-            if item.data() == node:
-                it = self.model.item(i, 1)
-                it.setText(value)
-                it_ts = self.model.item(i, 2)
-                it_ts.setText(timestamp)
-            i += 1
-
-
 class Window(QMainWindow):
 
     def __init__(self):
@@ -247,11 +173,11 @@ class Window(QMainWindow):
         self.setup_context_menu_tree()
         self.tree_ui = TreeWidget(self.ui.treeView)
         self.data_change_manager = DataChangeSubscriptionManager(self, self.uaclient)
-        self.tree_ui.model = LiveTreeModel(
+        self.tree_ui.model = TreeModel(
             self.uaclient, self.node_signal_dict, self.data_change_manager
         )
         self.tree_ui.model.setHorizontalHeaderLabels(
-            ["DisplayName", "BrowseName", "NodeId", "Value", "Description", "DataType"]
+            ["Display Name", "Browse Name", "Node ID", "Value", "Description", "Data Type"]
         )
         self.tree_ui.view.setModel(self.tree_ui.model)
 

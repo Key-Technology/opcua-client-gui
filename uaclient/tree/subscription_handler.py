@@ -1,4 +1,4 @@
-from PyQt5.QtCore import pyqtSignal, QObject, QMutex
+from PyQt5.QtCore import QObject, QMutex
 from uaclient.tree.subscribe_worker import SubscribeWorker
 from uaclient.tree.unsubscribe_worker import UnsubscribeWorker
 
